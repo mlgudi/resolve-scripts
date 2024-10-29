@@ -1,0 +1,138 @@
+-- A macro which provides an eased in/out progress value 0 - 1.
+{
+	Tools = ordered() {
+		InOut = GroupOperator {
+			CtrlWZoom = false,
+			NameSet = true,
+			CustomData = {
+				Path = {
+					Map = {
+						["Setting:"] = "Macros:\\"
+					}
+				},
+			},
+			Inputs = ordered() {
+				InFrames = InstanceInput {
+					SourceOp = "txIn",
+					Source = "v",
+					Name = "In Frames",
+					MinScale = 1,
+					MaxScale = 600,
+					Default = 45,
+				},
+				OutFrames = InstanceInput {
+					SourceOp = "txOut",
+					Source = "v",
+					Name = "Out Frames",
+					MinScale = 0,
+					MaxScale = 600,
+					Default = 45,
+				},
+				Progress = InstanceInput {
+					SourceOp = "anim",
+					Source = "v",
+					Name = "Progress",
+					Default = 0,
+				},
+				Input4 = InstanceInput {
+					SourceOp = "AnimCurves1",
+					Source = "Curve",
+				},
+				Input5 = InstanceInput {
+					SourceOp = "AnimCurves1",
+					Source = "EaseIn",
+					Width = 0.5,
+				},
+				Input6 = InstanceInput {
+					SourceOp = "AnimCurves1",
+					Source = "EaseOut",
+					Width = 0.5,
+				},
+				Input7 = InstanceInput {
+					SourceOp = "AnimCurves1",
+					Source = "ClipLow",
+					Width = 0.5,
+				},
+				Input8 = InstanceInput {
+					SourceOp = "AnimCurves1",
+					Source = "ClipHigh",
+					Width = 0.5,
+				}
+			},
+			ViewInfo = GroupInfo {
+				Pos = { 385, -16.5 },
+				Flags = {
+					AllowPan = false,
+					GridSnap = true,
+					ConnectedSnap = true,
+					AutoSnap = true,
+					RemoveRouters = true
+				},
+				Size = { 219.875, 96.2954, 109.938, 24.2424 },
+				Direction = "Vertical",
+				PipeStyle = "Orthogonal",
+				Scale = 1,
+				Offset = { 0, 0 }
+			},
+			Tools = ordered() {
+				txIn = Fuse.cNumber {
+					CtrlWShown = false,
+					NameSet = true,
+					Inputs = {
+						v = Input { Value = 45, }
+					},
+					ViewInfo = OperatorInfo { Pos = { 54.0625, 7.25758 } },
+				},
+				txOut = Fuse.cNumber {
+					CtrlWShown = false,
+					NameSet = true,
+					Inputs = {
+						v = Input { Value = 45, }
+					},
+					ViewInfo = OperatorInfo { Pos = { 54.0625, 40.2576 } },
+				},
+				anim = Fuse.cNumber {
+					CtrlWZoom = false,
+					CtrlWShown = false,
+					NameSet = true,
+					Inputs = {
+						v = Input {
+							SourceOp = "AnimCurves1",
+							Source = "Value",
+						}
+					},
+					ViewInfo = OperatorInfo { Pos = { -55.9375, 40.2576 } },
+				},
+				AnimCurves1 = LUTLookup {
+					CtrlWZoom = false,
+					Inputs = {
+						Source = Input { Value = FuID { "Custom" }, },
+						Input = Input {
+							Value = 1,
+							Expression = ": outBegin = comp.RenderEnd - txOut.v\nprog = 1\n\nif time - comp.RenderStart < txIn.v then\n    prog = (time - comp.RenderStart) / txIn.v\nelseif time > outBegin then\n    prog = 1 - (time - outBegin) / math.max(1, txOut.v)\nend\n\nreturn prog",
+						},
+						Curve = Input { Value = FuID { "Easing" }, },
+						EaseIn = Input { Value = FuID { "Expo" }, },
+						EaseOut = Input { Value = FuID { "Expo" }, },
+						Lookup = Input {
+							SourceOp = "AnimCurvesonanimLookup",
+							Source = "Value",
+						},
+						ClipLow = Input { Value = 1, },
+						ClipHigh = Input { Value = 1, }
+					},
+				},
+				AnimCurvesonanimLookup = LUTBezier {
+					KeyColorSplines = {
+						[0] = {
+							[0] = { 0, RH = { 0.333333333333333, 0.333333333333333 }, Flags = { Linear = true } },
+							[1] = { 1, LH = { 0.666666666666667, 0.666666666666667 }, Flags = { Linear = true } }
+						}
+					},
+					SplineColor = { Red = 0, Green = 0, Blue = 0 },
+					NameSet = true,
+				}
+			},
+		}
+	},
+}

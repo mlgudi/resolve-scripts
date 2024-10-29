@@ -1,0 +1,45 @@
+--[[
+    A Fuse which outputs the name of an OSRS item by item ID.
+    Requires the ItemNames.lua file to be in \\OSRS within your Fusion Lua modules folder.
+--]]
+
+DATA_TABLE = require("OSRSData\\items\\ItemNames").load()
+MAX_ID = DATA_TABLE[#DATA_TABLE]
+
+FuRegisterClass("ItemName", CT_Tool, {
+    REGS_Name = "ItemName",
+    REGS_Category = "OSRS",
+    REGS_OpIconString = "in",
+    REGS_OpDescription = "Outputs the name of an OSRS item by item ID.",
+    REGS_Company = "",
+    REGS_URL = "",
+    REG_Version = 100,
+    
+    REG_NoBlendCtrls = true,
+    REG_NoObjMatCtrls = true,
+    REG_NoMotionBlurCtrls = true,
+    REG_NoPreCalcProcess = true,
+    REG_OpNoMask = true,
+})
+
+function Create()
+    ItemID = self:AddInput("Item ID", "ItemID", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = MAX_ID,
+        INP_Default = 0,
+        INP_Integer = true,
+    })
+
+    OutData = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Text",
+        LINK_Main = 1
+    })
+end
+
+function Process(req)
+    local out = DATA_TABLE[ItemID:GetValue(req).Value] or ""
+    OutData:Set(req, Text(out))
+    return out
+end

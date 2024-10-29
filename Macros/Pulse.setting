@@ -1,0 +1,177 @@
+-- A macro which loops a scale up/down animation with configurable scale, duration, and easing.
+{
+	Tools = ordered() {
+		Pulse = GroupOperator {
+			Inputs = ordered() {
+				Input1 = InstanceInput {
+					SourceOp = "anim",
+					Source = "NumberIn4",
+					Default = 180,
+				},
+				Input2 = InstanceInput {
+					SourceOp = "anim",
+					Source = "NumberIn5",
+					Default = 1,
+				},
+				Input3 = InstanceInput {
+					SourceOp = "anim",
+					Source = "NumberIn6",
+					Default = 0.2,
+				},
+				Input4 = InstanceInput {
+					SourceOp = "anim",
+					Source = "NumberIn7",
+				},
+				Input5 = InstanceInput {
+					SourceOp = "anim",
+					Source = "NumberIn8",
+				},
+				Input6 = InstanceInput {
+					SourceOp = "AnimCurves1",
+					Source = "EaseIn",
+					Width = 0.5,
+				},
+				Input7 = InstanceInput {
+					SourceOp = "AnimCurves1",
+					Source = "EaseOut",
+					Width = 0.5,
+				},
+				MainInput1 = InstanceInput {
+					SourceOp = "Transform1",
+					Source = "Input",
+				}
+			},
+			Outputs = {
+				MainOutput1 = InstanceOutput {
+					SourceOp = "Transform1",
+					Source = "Output",
+				}
+			},
+			ViewInfo = GroupInfo { Pos = { 0, 0 } },
+			Tools = ordered() {
+				anim = Custom {
+					CtrlWZoom = false,
+					NameSet = true,
+					Inputs = {
+						NumberIn1 = Input {
+							SourceOp = "AnimCurves1",
+							Source = "Value",
+						},
+						NumberIn2 = Input { Expression = "((time % NumberIn4) + (NumberIn4 * NumberIn8)) / (NumberIn4 / 2)", },
+						NumberIn3 = Input { Expression = "iif(NumberIn2 >= 1, 2 - NumberIn2, NumberIn2)", },
+						NumberIn4 = Input { Value = 180, },
+						NumberIn5 = Input { Value = 1, },
+						NumberIn6 = Input { Value = 0.2, },
+						LUTIn1 = Input {
+							SourceOp = "CustomTool1LUTIn1",
+							Source = "Value",
+						},
+						LUTIn2 = Input {
+							SourceOp = "CustomTool1LUTIn2",
+							Source = "Value",
+						},
+						LUTIn3 = Input {
+							SourceOp = "CustomTool1LUTIn3",
+							Source = "Value",
+						},
+						LUTIn4 = Input {
+							SourceOp = "CustomTool1LUTIn4",
+							Source = "Value",
+						},
+						NumberControls = Input { Value = 1, },
+						NameforNumber1 = Input { Value = "anim", },
+						NameforNumber2 = Input { Value = "loop", },
+						NameforNumber3 = Input { Value = "curve", },
+						NameforNumber4 = Input { Value = "Loop Duration", },
+						NameforNumber5 = Input { Value = "Base Scale", },
+						NameforNumber6 = Input { Value = "Anim Scale", },
+						NameforNumber7 = Input { Value = "Rot Scale", },
+						NameforNumber8 = Input { Value = "Loop Offset", }
+					},
+					ViewInfo = OperatorInfo { Pos = { 55, -49.5 } },
+				},
+				AnimCurves1 = LUTLookup {
+					CtrlWZoom = false,
+					Inputs = {
+						Source = Input { Value = FuID { "Custom" }, },
+						Input = Input {
+							Value = 0.977777777777778,
+							Expression = "anim.NumberIn3",
+						},
+						Curve = Input { Value = FuID { "Easing" }, },
+						EaseIn = Input { Value = FuID { "Sine" }, },
+						EaseOut = Input { Value = FuID { "Sine" }, },
+						Lookup = Input {
+							SourceOp = "AnimCurves1Lookup",
+							Source = "Value",
+						},
+						Offset = Input { Expression = "anim.NumberIn8 % 1.0", }
+					},
+				},
+				AnimCurves1Lookup = LUTBezier {
+					KeyColorSplines = {
+						[0] = {
+							[0] = { 0, RH = { 0.333333333333333, 0.333333333333333 }, Flags = { Linear = true } },
+							[1] = { 1, LH = { 0.666666666666667, 0.666666666666667 }, Flags = { Linear = true } }
+						}
+					},
+					SplineColor = { Red = 0, Green = 0, Blue = 0 },
+					CtrlWZoom = false,
+				},
+				CustomTool1LUTIn1 = LUTBezier {
+					KeyColorSplines = {
+						[0] = {
+							[0] = { 0, RH = { 0.333333333333333, 0.333333333333333 }, Flags = { Linear = true } },
+							[1] = { 1, LH = { 0.666666666666667, 0.666666666666667 }, Flags = { Linear = true } }
+						}
+					},
+					SplineColor = { Red = 0, Green = 0, Blue = 0 },
+					CtrlWZoom = false,
+				},
+				CustomTool1LUTIn2 = LUTBezier {
+					KeyColorSplines = {
+						[0] = {
+							[0] = { 0, RH = { 0.333333333333333, 0.333333333333333 }, Flags = { Linear = true } },
+							[1] = { 1, LH = { 0.666666666666667, 0.666666666666667 }, Flags = { Linear = true } }
+						}
+					},
+					SplineColor = { Red = 0, Green = 0, Blue = 0 },
+					CtrlWZoom = false,
+				},
+				CustomTool1LUTIn3 = LUTBezier {
+					KeyColorSplines = {
+						[0] = {
+							[0] = { 0, RH = { 0.333333333333333, 0.333333333333333 }, Flags = { Linear = true } },
+							[1] = { 1, LH = { 0.666666666666667, 0.666666666666667 }, Flags = { Linear = true } }
+						}
+					},
+					SplineColor = { Red = 0, Green = 0, Blue = 0 },
+					CtrlWZoom = false,
+				},
+				CustomTool1LUTIn4 = LUTBezier {
+					KeyColorSplines = {
+						[0] = {
+							[0] = { 0, RH = { 0.333333333333333, 0.333333333333333 }, Flags = { Linear = true } },
+							[1] = { 1, LH = { 0.666666666666667, 0.666666666666667 }, Flags = { Linear = true } }
+						}
+					},
+					SplineColor = { Red = 0, Green = 0, Blue = 0 },
+					CtrlWZoom = false,
+				},
+				Transform1 = Transform {
+					Inputs = {
+						Size = Input {
+							Value = 1.15524023694996,
+							Expression = "anim.NumberIn5 + (anim.NumberIn6 * anim.NumberIn1)",
+						},
+						XSize = Input { Value = 1.15524, },
+						YSize = Input { Value = 1.15524, },
+						Angle = Input { Expression = "(-anim.NumberIn7 * anim.NumberIn1) + (anim.NumberIn7 * 2 * anim.NumberIn1)", }
+					},
+					ViewInfo = OperatorInfo { Pos = { 55, 49.5 } },
+				}
+			},
+		}
+	},
+	ActiveTool = "Pulse"
+}

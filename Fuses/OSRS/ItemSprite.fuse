@@ -1,0 +1,84 @@
+--[[
+    A Fuse to extract OSRS item sprites from a sprite sheet by item ID.
+    Sprite sheet can be found here: https://github.com/mlgudi/resolve-scripts/blob/main/Fuses/OSRS/sprite_sheet.png
+    
+    Usage:
+    1. Add a Loader which loads the sprite sheet image.
+    2. Add ItemSprite and connect the Loader to Input.
+--]]
+
+local SPRITE_WIDTH = 36
+local SPRITE_HEIGHT = 32
+local COLUMNS = 100
+local MAX_ITEMS = 50000
+
+FuRegisterClass("ItemSprite", CT_Tool, {
+    REGS_Name = "ItemSprite",
+    REGS_Category = "OSRS",
+    REGS_OpIconString = "is",
+    REGS_OpDescription = "Extracts individual sprites from the OSRS item sprite sheet by item ID.",
+    REGS_Company = "",
+    REGS_URL = "",
+    REG_Version = 100,
+    
+    REG_NoBlendCtrls = true,
+    REG_NoObjMatCtrls = true,
+    REG_NoMotionBlurCtrls = true,
+    REG_NoPreCalcProcess = true,
+    REG_TimeVariant = true,
+    REG_OpNoMask = true,
+})
+
+function Create()
+    ItemID = self:AddInput("Item ID", "ItemID", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = MAX_ITEMS,
+        INP_Default = 0,
+        INP_Integer = true,
+        ICD_Center = 0.0,
+        IC_Visible = true,
+    })
+
+    InImage = self:AddInput("Input", "Input", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+        INP_Required = true,
+    })
+ 
+    OutImage = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+        INP_SendRequest = false,
+        INP_Required = false,
+    })
+end
+
+local function calcSpritePos(itemId, imageHeight)
+    local xOrigin = (itemId % COLUMNS) * SPRITE_WIDTH
+    local yOrigin = imageHeight - ((math.floor(itemId / COLUMNS) + 1) * SPRITE_HEIGHT)
+    return xOrigin, yOrigin
+end
+
+function Process(req)
+    local img = InImage:GetValue(req)
+    local itemId = ItemID:GetValue(req).Value
+    local xOrigin, yOrigin = calcSpritePos(itemId, img.Height)
+    
+    if yOrigin > img.Height then
+        xOrigin, yOrigin = calcSpritePos(0, img.Height)
+    end
+
+    local out = Image({
+        IMG_Width = SPRITE_WIDTH,
+        IMG_Height = SPRITE_HEIGHT,
+    })
+
+    img:Crop(out, {
+        CROP_XOffset = xOrigin,
+        CROP_YOffset = yOrigin,
+    })
+
+    OutImage:Set(req, out)
+end
