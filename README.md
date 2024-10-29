@@ -3,7 +3,7 @@ A dump of DaVinci Resolve/Fusion helper scripts/fuses/macros. These are written 
 
 **Scripts**
 
-[Timeline/MakeMain.lua](Scripts/Timeline/MakeMain.lua) sets a timeline as the primary timeline for a project, and [Timeline/SetMain.lua](Scripts/Timeline/SetMain.lua) sets it as the current timeline. For quickly getting back to the main timeline.
+[Timeline/MakeMain.lua](Scripts/Timeline/MakeMain.lua) sets a timeline as the primary timeline for a project, and [Timeline/SetMain.lua](Scripts/Timeline/SetMain.lua) sets the current timeline to whichever is stored as main. For quickly getting back to the main timeline.
 
 [SFX/SFX.lua](Scripts/SFX/SFX.lua) is a script that inserts audio to the timeline at the current playhead position. It accepts two args: clip name and track index. It is intended for use with hotkeys, more details [here](https://github.com/mlgudi/hotkey-fuscript).
 
