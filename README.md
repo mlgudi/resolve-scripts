@@ -9,6 +9,8 @@ A dump of DaVinci Resolve/Fusion helper scripts/fuses/macros. These are written 
 
 **Fuses**
 
+[Halftone.fuse](Fuses/Halftone.fuse) is a halftone effect that converts an image into a pattern of dots whose sizes are determined by the luma or individual color channels of the input image. It uses DCTL to process on the GPU.
+
 [ItemName.fuse](Fuses/OSRS/ItemName.fuse) is a fuse that outputs the name of an OSRS item by item ID. It requires [ItemNames.lua](Modules/OSRS/ItemNames.lua) is added to your Fusion Lua modules folder within the "OSRS" folder.
 
 [ItemSprite.fuse](Fuses/OSRS/ItemSprite.fuse) is a fuse that extracts individual sprites from the OSRS item sprite sheet by item ID. The sprite sheet can be found [here](Fuses/OSRS/sprite_sheet.png).

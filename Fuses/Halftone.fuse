@@ -1,0 +1,670 @@
+--[[--
+Halftone DCTL Fuse
+
+A halftone effect that converts an image into a pattern of dots
+whose sizes are determined by the luma or individual color channels of the input image.
+--]]--
+
+FuRegisterClass("Halftone", CT_SourceTool, {
+    REGS_Category = "Fuses",
+    REGS_OpIconString = "HTN",
+    REGS_OpDescription = "Halftone",
+
+    REG_NoObjMatCtrls = true,
+    REG_NoMotionBlurCtrls = true,
+
+    REG_Source_GlobalCtrls = true,
+    REG_Source_SizeCtrls = true,
+    REG_Source_AspectCtrls = true,
+    REG_Source_DepthCtrls = true,
+    REG_OpNoMask = false,
+    REG_Fuse_NoEdit = false,
+    REG_Fuse_NoReload = false,
+
+    REG_TimeVariant = false,
+    REG_Version = 100,
+})
+
+HalftoneParams = [[
+    float iWidth;
+    float iHeight;
+    float dotSize;
+    float angle;
+    int channelMode;
+    float contrast;
+    float brightness;
+    float blendAmount;
+    int blendMode;
+    bool useAlpha;
+    float blendLow;
+    float blendHigh;
+    float fgR;
+    float fgG;
+    float fgB;
+    float fgA;
+    float bgR;
+    float bgG;
+    float bgB;
+    float bgA;
+]]
+
+HalftoneKernel = [[
+    __DEVICE__ float getLuma(float r, float g, float b) {
+        return r * 0.2126f + g * 0.7152f + b * 0.0722f;
+    }
+
+    __DEVICE__ float2 rotate2D(float2 coord, float angle) {
+        float s = _sinf(angle);
+        float c = _cosf(angle);
+        return to_float2(
+            coord.x * c - coord.y * s,
+            coord.x * s + coord.y * c
+        );
+    }
+
+    __DEVICE__ float circleTest(float2 p, float radius) {
+        float dist = _sqrtf(p.x * p.x + p.y * p.y);
+        return (dist <= radius) ? 1.0f : 0.0f;
+    }
+
+    __DEVICE__ float4 blendNormal(float4 base, float4 blend, float opacity, bool useAlpha) {
+        float finalAlpha = useAlpha ? blend.w : base.w;
+        float effectiveAlpha = blend.w * opacity;
+        
+        return to_float4(
+            base.x * (1.0f - effectiveAlpha) + blend.x * effectiveAlpha,
+            base.y * (1.0f - effectiveAlpha) + blend.y * effectiveAlpha,
+            base.z * (1.0f - effectiveAlpha) + blend.z * effectiveAlpha,
+            finalAlpha
+        );
+    }
+
+    __DEVICE__ float blendMultiplyComponent(float base, float blend) {
+        return base * blend;
+    }
+
+    __DEVICE__ float4 blendMultiply(float4 base, float4 blend, float opacity, bool useAlpha) {
+        float4 mult = to_float4(
+            blendMultiplyComponent(base.x, blend.x),
+            blendMultiplyComponent(base.y, blend.y),
+            blendMultiplyComponent(base.z, blend.z),
+            blend.w
+        );
+        return blendNormal(base, mult, opacity, useAlpha);
+    }
+
+    __DEVICE__ float blendScreenComponent(float base, float blend) {
+        return base + blend - (base * blend);
+    }
+
+    __DEVICE__ float4 blendScreen(float4 base, float4 blend, float opacity, bool useAlpha) {
+        float4 screen = to_float4(
+            blendScreenComponent(base.x, blend.x),
+            blendScreenComponent(base.y, blend.y),
+            blendScreenComponent(base.z, blend.z),
+            blend.w
+        );
+        return blendNormal(base, screen, opacity, useAlpha);
+    }
+
+    __DEVICE__ float blendOverlayComponent(float base, float blend) {
+        return (base <= 0.5f) ? 
+            (2.0f * base * blend) : 
+            (1.0f - 2.0f * (1.0f - base) * (1.0f - blend));
+    }
+
+    __DEVICE__ float4 blendOverlay(float4 base, float4 blend, float opacity, bool useAlpha) {
+        float4 overlay = to_float4(
+            blendOverlayComponent(base.x, blend.x),
+            blendOverlayComponent(base.y, blend.y),
+            blendOverlayComponent(base.z, blend.z),
+            blend.w
+        );
+        return blendNormal(base, overlay, opacity, useAlpha);
+    }
+    
+    __DEVICE__ float blendDarkenComponent(float base, float blend) {
+        return _fminf(base, blend);
+    }
+
+    __DEVICE__ float4 blendDarken(float4 base, float4 blend, float opacity, bool useAlpha) {
+        float4 darken = to_float4(
+            blendDarkenComponent(base.x, blend.x),
+            blendDarkenComponent(base.y, blend.y),
+            blendDarkenComponent(base.z, blend.z),
+            blend.w
+        );
+        return blendNormal(base, darken, opacity, useAlpha);
+    }
+
+    __DEVICE__ float blendLightenComponent(float base, float blend) {
+        return _fmaxf(base, blend);
+    }
+
+    __DEVICE__ float4 blendLighten(float4 base, float4 blend, float opacity, bool useAlpha) {
+        float4 lighten = to_float4(
+            blendLightenComponent(base.x, blend.x),
+            blendLightenComponent(base.y, blend.y),
+            blendLightenComponent(base.z, blend.z),
+            blend.w
+        );
+        return blendNormal(base, lighten, opacity, useAlpha);
+    }
+
+    __DEVICE__ float blendColorDodgeComponent(float base, float blend) {
+        if (blend >= 1.0f) {
+            return 1.0f;
+        }
+        return _fminf(1.0f, base / (1.0f - blend));
+    }
+
+    __DEVICE__ float4 blendColorDodge(float4 base, float4 blend, float opacity, bool useAlpha) {
+        float4 dodge = to_float4(
+            blendColorDodgeComponent(base.x, blend.x),
+            blendColorDodgeComponent(base.y, blend.y),
+            blendColorDodgeComponent(base.z, blend.z),
+            blend.w
+        );
+        return blendNormal(base, dodge, opacity, useAlpha);
+    }
+
+    __DEVICE__ float blendColorBurnComponent(float base, float blend) {
+        if (blend <= 0.0f) {
+            return 0.0f;
+        }
+        return 1.0f - _fminf(1.0f, (1.0f - base) / blend);
+    }
+
+    __DEVICE__ float4 blendColorBurn(float4 base, float4 blend, float opacity, bool useAlpha) {
+        float4 burn = to_float4(
+            blendColorBurnComponent(base.x, blend.x),
+            blendColorBurnComponent(base.y, blend.y),
+            blendColorBurnComponent(base.z, blend.z),
+            blend.w
+        );
+        return blendNormal(base, burn, opacity, useAlpha);
+    }
+
+    __DEVICE__ float blendHardLightComponent(float base, float blend) {
+        return blend <= 0.5f ? 
+            blendMultiplyComponent(base, 2.0f * blend) :
+            blendScreenComponent(base, 2.0f * blend - 1.0f);
+    }
+
+    __DEVICE__ float4 blendHardLight(float4 base, float4 blend, float opacity, bool useAlpha) {
+        float4 hardLight = to_float4(
+            blendHardLightComponent(base.x, blend.x),
+            blendHardLightComponent(base.y, blend.y),
+            blendHardLightComponent(base.z, blend.z),
+            blend.w
+        );
+        return blendNormal(base, hardLight, opacity, useAlpha);
+    }
+
+    __DEVICE__ float blendSoftLightComponent(float base, float blend) {
+        if (blend <= 0.5f) {
+            return base - (1.0f - 2.0f * blend) * base * (1.0f - base);
+        } else {
+            float d = (base <= 0.25f) ? 
+                ((16.0f * base - 12.0f) * base + 4.0f) * base :
+                _sqrtf(base);
+            return base + (2.0f * blend - 1.0f) * (d - base);
+        }
+    }
+
+    __DEVICE__ float4 blendSoftLight(float4 base, float4 blend, float opacity, bool useAlpha) {
+        float4 softLight = to_float4(
+            blendSoftLightComponent(base.x, blend.x),
+            blendSoftLightComponent(base.y, blend.y),
+            blendSoftLightComponent(base.z, blend.z),
+            blend.w
+        );
+        return blendNormal(base, softLight, opacity, useAlpha);
+    }
+
+    __DEVICE__ float blendDifferenceComponent(float base, float blend) {
+        return _fabs(base - blend);
+    }
+
+    __DEVICE__ float4 blendDifference(float4 base, float4 blend, float opacity, bool useAlpha) {
+        float4 diff = to_float4(
+            blendDifferenceComponent(base.x, blend.x),
+            blendDifferenceComponent(base.y, blend.y),
+            blendDifferenceComponent(base.z, blend.z),
+            blend.w
+        );
+        return blendNormal(base, diff, opacity, useAlpha);
+    }
+
+    __DEVICE__ float blendExclusionComponent(float base, float blend) {
+        return base + blend - 2.0f * base * blend;
+    }
+
+    __DEVICE__ float4 blendExclusion(float4 base, float4 blend, float opacity, bool useAlpha) {
+        float4 excl = to_float4(
+            blendExclusionComponent(base.x, blend.x),
+            blendExclusionComponent(base.y, blend.y),
+            blendExclusionComponent(base.z, blend.z),
+            blend.w
+        );
+        return blendNormal(base, excl, opacity, useAlpha);
+    }
+
+    __DEVICE__ float sampleCellValue(
+        __TEXTURE2D__ img,
+        float2 imagePos,
+        float dotSize,
+        int channelMode,
+        float iWidth,
+        float iHeight)
+    {
+        float totalValue = 0.0f;
+        float sampleCount = 0.0f;
+        
+        for (float dy = -0.4f; dy <= 0.4f; dy += 0.2f) {
+            for (float dx = -0.4f; dx <= 0.4f; dx += 0.2f) {
+                float2 samplePoint = to_float2(
+                    imagePos.x + dx * dotSize,
+                    imagePos.y + dy * dotSize
+                );
+                
+                if (samplePoint.x >= 0 && samplePoint.x < iWidth && 
+                    samplePoint.y >= 0 && samplePoint.y < iHeight) {
+                    
+                    float4 color = _tex2DVecN(img, samplePoint.x, samplePoint.y, 15);
+                    float value;
+                    
+                    if (channelMode == 0) {
+                        value = getLuma(color.x, color.y, color.z);
+                    } else if (channelMode == 1) {
+                        value = color.x;
+                    } else if (channelMode == 2) {
+                        value = color.y;
+                    } else {
+                        value = color.z;
+                    }
+                    
+                    totalValue += value;
+                    sampleCount += 1.0f;
+                }
+            }
+        }
+        
+        return sampleCount > 0.0f ? totalValue / sampleCount : 0.0f;
+    }
+
+    __KERNEL__ void HalftoneKernel(
+        __CONSTANTREF__ HalftoneParams *params,
+        __TEXTURE2D__ img,
+        __TEXTURE2D_WRITE__ dst)
+    {
+        DEFINE_KERNEL_ITERATORS_XY(x, y);
+        
+        if (x < params->iWidth && y < params->iHeight) {
+            float4 color = _tex2DVecN(img, x, y, 15);
+            
+            float inputLuma = getLuma(color.x, color.y, color.z);
+            bool shouldBlend = inputLuma >= params->blendLow && inputLuma <= params->blendHigh;
+            
+            if (!shouldBlend) {
+                _tex2DVec4Write(dst, x, y, color);
+                return;
+            }
+            
+            float2 rotatedCoord = rotate2D(
+                to_float2(x, y),
+                params->angle
+            );
+            
+            float2 cellCoord = to_float2(
+                rotatedCoord.x / params->dotSize,
+                rotatedCoord.y / params->dotSize
+            );
+            
+            float2 cell = to_float2(
+                _floor(cellCoord.x),
+                _floor(cellCoord.y)
+            );
+            
+            float2 cellPos = to_float2(
+                cellCoord.x - cell.x - 0.5f,
+                cellCoord.y - cell.y - 0.5f
+            );
+            
+            float value = sampleCellValue(
+                img,
+                to_float2(x, y),
+                params->dotSize,
+                params->channelMode,
+                params->iWidth,
+                params->iHeight
+            );
+            
+            value = _clampf((value - 0.5f) * params->contrast + 0.5f + params->brightness, 0.0f, 1.0f);
+            
+            float radius = 0.5f * _sqrtf(value);
+            float pattern = circleTest(cellPos, radius);
+            
+            float4 halftoneColor;
+            if (pattern > 0.5f) {
+                halftoneColor = to_float4(params->fgR, params->fgG, params->fgB, params->fgA);
+            } else {
+                halftoneColor = to_float4(params->bgR, params->bgG, params->bgB, params->bgA);
+            }
+            
+            float4 result;
+            switch (params->blendMode) {
+                case 1:
+                    result = blendMultiply(color, halftoneColor, params->blendAmount, params->useAlpha);
+                    break;
+                case 2:
+                    result = blendScreen(color, halftoneColor, params->blendAmount, params->useAlpha);
+                    break;
+                case 3:
+                    result = blendOverlay(color, halftoneColor, params->blendAmount, params->useAlpha);
+                    break;
+                case 4:
+                    result = blendDarken(color, halftoneColor, params->blendAmount, params->useAlpha);
+                    break;
+                case 5:
+                    result = blendLighten(color, halftoneColor, params->blendAmount, params->useAlpha);
+                    break;
+                case 6:
+                    result = blendColorDodge(color, halftoneColor, params->blendAmount, params->useAlpha);
+                    break;
+                case 7:
+                    result = blendColorBurn(color, halftoneColor, params->blendAmount, params->useAlpha);
+                    break;
+                case 8:
+                    result = blendHardLight(color, halftoneColor, params->blendAmount, params->useAlpha);
+                    break;
+                case 9:
+                    result = blendSoftLight(color, halftoneColor, params->blendAmount, params->useAlpha);
+                    break;
+                case 10:
+                    result = blendDifference(color, halftoneColor, params->blendAmount, params->useAlpha);
+                    break;
+                case 11:
+                    result = blendExclusion(color, halftoneColor, params->blendAmount, params->useAlpha);
+                    break;
+                default:
+                    result = blendNormal(color, halftoneColor, params->blendAmount, params->useAlpha);
+                    break;
+            }
+            
+            _tex2DVec4Write(dst, x, y, result);
+        }
+    }
+]]
+
+function Create()
+    InImage = self:AddInput("Input", "Input", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+        INP_Required = true
+    })
+
+    PatternLabel = self:AddInput("Pattern", "PatternLabel", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "LabelControl",
+        INP_External = false,
+        INP_Passive = true,
+        LBLC_DropDownButton = true,
+        LBLC_NumInputs = 5,
+        LBLC_NestLevel = 1,
+    })
+
+    InDotSize = self:AddInput("Dot Size", "DotSize", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 10.0,
+        INP_MinScale = 1.0,
+        INP_MaxScale = 50.0,
+        INP_Integer = true
+    })
+
+    InAngle = self:AddInput("Pattern Angle", "Angle", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ScrewControl",
+        INP_Default = 0.0,
+        INP_MinScale = -180.0,
+        INP_MaxScale = 180.0,
+    })
+
+    InChannelMode = self:AddInput("Channel Mode", "ChannelMode", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ComboControl",
+        INP_Default = 0.0,
+        INP_Integer = true,
+        { CCS_AddString = "Luma" },
+        { CCS_AddString = "Red" },
+        { CCS_AddString = "Green" },
+        { CCS_AddString = "Blue" },
+        CC_LabelPosition = "Horizontal"
+    })
+
+    InContrast = self:AddInput("Contrast", "Contrast", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 1.0,
+        INP_MinScale = 0.0,
+        INP_MaxScale = 5.0,
+    })
+
+    InBrightness = self:AddInput("Brightness", "Brightness", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 0.0,
+        INP_MinScale = -1.0,
+        INP_MaxScale = 1.0,
+    })
+
+    ColorLabel = self:AddInput("Color", "ColorLabel", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "LabelControl",
+        INP_External = false,
+        INP_Passive = true,
+        LBLC_DropDownButton = true,
+        LBLC_NumInputs = 8,
+        LBLC_NestLevel = 1,
+    })
+
+    -- Foreground color
+    FgR = self:AddInput("Red", "FgRed", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1.0,
+        INP_Default = 1.0,
+        ICS_Name = "Foreground",
+        IC_ControlGroup = 1,
+        IC_ControlID = 0,
+    })
+
+    FgG = self:AddInput("Green", "FgGreen", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1.0,
+        INP_Default = 1.0,
+        IC_ControlGroup = 1,
+        IC_ControlID = 1,
+    })
+
+    FgB = self:AddInput("Blue", "FgBlue", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1.0,
+        INP_Default = 1.0,
+        IC_ControlGroup = 1,
+        IC_ControlID = 2,
+    })
+
+    FgA = self:AddInput("Alpha", "FgAlpha", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1.0,
+        INP_Default = 1.0,
+        IC_ControlGroup = 1,
+        IC_ControlID = 3,
+    })
+
+    -- Background color
+    BgR = self:AddInput("Red", "BgRed", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1.0,
+        INP_Default = 0,
+        ICS_Name = "Background",
+        IC_ControlGroup = 2,
+        IC_ControlID = 0,
+    })
+
+    BgG = self:AddInput("Green", "BgGreen", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1.0,
+        INP_Default = 0,
+        IC_ControlGroup = 2,
+        IC_ControlID = 1,
+    })
+
+    BgB = self:AddInput("Blue", "BgBlue", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1.0,
+        INP_Default = 0,
+        IC_ControlGroup = 2,
+        IC_ControlID = 2,
+    })
+
+    BgA = self:AddInput("Alpha", "BgAlpha", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ColorControl",
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1.0,
+        INP_Default = 1.0,
+        IC_ControlGroup = 2,
+        IC_ControlID = 3,
+    })
+
+    BlendLabel = self:AddInput("Blend", "BlendLabel", {
+        LINKID_DataType = "Text",
+        INPID_InputControl = "LabelControl",
+        INP_External = false,
+        INP_Passive = true,
+        LBLC_DropDownButton = true,
+        LBLC_NumInputs = 5,
+        LBLC_NestLevel = 1,
+    })
+
+    InBlendMode = self:AddInput("Blend Mode", "BlendMode", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "ComboControl",
+        INP_Default = 0.0,
+        INP_Integer = true,
+        { CCS_AddString = "Normal" },
+        { CCS_AddString = "Multiply" },
+        { CCS_AddString = "Screen" },
+        { CCS_AddString = "Overlay" },
+        { CCS_AddString = "Darken" },
+        { CCS_AddString = "Lighten" },
+        { CCS_AddString = "Color Dodge" },
+        { CCS_AddString = "Color Burn" },
+        { CCS_AddString = "Hard Light" },
+        { CCS_AddString = "Soft Light" },
+        { CCS_AddString = "Difference" },
+        { CCS_AddString = "Exclusion" },
+        CC_LabelPosition = "Horizontal"
+    })
+
+    InBlendAmount = self:AddInput("Blend Amount", "BlendAmount", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "SliderControl",
+        INP_Default = 1.0,
+        INP_MinScale = 0.0,
+        INP_MaxScale = 1.0,
+    })
+
+    InUseAlpha = self:AddInput("Blend Alpha", "UseAlpha", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "CheckboxControl",
+        INP_Integer = true,
+        INP_Default = 0
+    })
+
+    BlendLow = self:AddInput("Blend Low", "BlendLow", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "RangeControl",
+        INP_Default = 0.0,
+        IC_ControlGroup = 3,
+        IC_ControlID = 0,
+    })
+    BlendHigh = self:AddInput("Blend High", "BlendHigh", {
+        LINKID_DataType = "Number",
+        INPID_InputControl = "RangeControl",
+        INP_Default = 1.0,
+        IC_ControlGroup = 3,
+        IC_ControlID = 1,
+    })
+
+    -- Output
+    OutImage = self:AddOutput("Output", "Output", {
+        LINKID_DataType = "Image",
+        LINK_Main = 1,
+    })
+end
+
+function Process(req)
+    local img = InImage:GetValue(req)
+    
+    if img == nil then
+        return
+    end
+
+    local dst = Image{IMG_Like = img, IMG_DeferAlloc = true}
+    
+    local node = DVIPComputeNode(req, "HalftoneKernel", HalftoneKernel, "HalftoneParams", HalftoneParams)
+    
+    local params = node:GetParamBlock(HalftoneParams)
+    params.iWidth = img.DataWindow:Width()
+    params.iHeight = img.DataWindow:Height()
+    params.dotSize = InDotSize:GetValue(req).Value
+    params.angle = InAngle:GetValue(req).Value * 3.14159 / 180.0
+    params.channelMode = InChannelMode:GetValue(req).Value
+    params.contrast = InContrast:GetValue(req).Value
+    params.brightness = InBrightness:GetValue(req).Value
+    params.blendAmount = InBlendAmount:GetValue(req).Value
+    params.blendMode = InBlendMode:GetValue(req).Value
+    params.useAlpha = InUseAlpha:GetValue(req).Value == 1
+    params.blendLow = BlendLow:GetValue(req).Value
+    params.blendHigh = BlendHigh:GetValue(req).Value
+
+    params.fgR = FgR:GetValue(req).Value
+    params.fgG = FgG:GetValue(req).Value
+    params.fgB = FgB:GetValue(req).Value
+    params.fgA = FgA:GetValue(req).Value
+    
+    params.bgR = BgR:GetValue(req).Value
+    params.bgG = BgG:GetValue(req).Value
+    params.bgB = BgB:GetValue(req).Value
+    params.bgA = BgA:GetValue(req).Value
+    
+    node:SetParamBlock(params)
+    node:AddInput("img", img)
+    node:AddOutput("dst", dst)
+    
+    local success = node:RunSession(req)
+    
+    if not success then
+        dst = nil
+        dump(node:GetErrorLog())
+    end
+    
+    OutImage:Set(req, dst)
+end
