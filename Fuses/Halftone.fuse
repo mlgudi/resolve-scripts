@@ -6,7 +6,7 @@ whose sizes are determined by the luma or individual color channels of the input
 --]]--
 
 FuRegisterClass("Halftone", CT_SourceTool, {
-    REGS_Category = "Fuses",
+    REGS_Category = "Effect",
     REGS_OpIconString = "HTN",
     REGS_OpDescription = "Halftone",
 
